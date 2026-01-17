@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: site-analysis-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - PYTHONUNBUFFERED=1
+    networks:
+      - site-analysis-network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: site-analysis-frontend
+    ports:
+      - "8501:80"
+    depends_on:
+      - backend
+    networks:
+      - site-analysis-network
+
+networks:
+  site-analysis-network:
+    driver: bridge
