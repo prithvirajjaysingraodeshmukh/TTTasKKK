@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { MapContainer, TileLayer, CircleMarker, Popup, useMap } from 'react-leaflet';
+import MarkerClusterGroup from 'react-leaflet-cluster';
 import L from 'leaflet';
 
 interface SiteData {
@@ -78,39 +79,41 @@ const SiteMap = ({ sites }: SiteMapProps) => {
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
-      {sites.map((site, index) => {
-        const lat = Number(site.lat);
-        const lon = Number(site.lon);
-        
-        // Skip invalid coordinates
-        if (isNaN(lat) || isNaN(lon) || lat === 0 || lon === 0) return null;
+      <MarkerClusterGroup chunkedLoading={true}>
+        {sites.map((site, index) => {
+          const lat = Number(site.lat);
+          const lon = Number(site.lon);
+          
+          // Skip invalid coordinates
+          if (isNaN(lat) || isNaN(lon) || lat === 0 || lon === 0) return null;
 
-        const color = getColor(site.area_class);
-        const siteId = site.site_id || `Site ${index + 1}`;
-        const density = Number(site.density) || 0;
+          const color = getColor(site.area_class);
+          const siteId = site.site_id || `Site ${index + 1}`;
+          const density = Number(site.density) || 0;
 
-        return (
-          <CircleMarker
-            key={index}
-            center={[lat, lon]}
-            radius={5}
-            pathOptions={{
-              fillColor: color,
-              color: color,
-              fillOpacity: 0.7,
-              weight: 2,
-            }}
-          >
-            <Popup>
-              <div style={{ minWidth: '150px' }}>
-                <strong>Site ID:</strong> {String(siteId)}<br />
-                <strong>Density:</strong> {density.toFixed(4)} sites/km²<br />
-                <strong>Classification:</strong> {site.area_class || 'Unknown'}
-              </div>
-            </Popup>
-          </CircleMarker>
-        );
-      })}
+          return (
+            <CircleMarker
+              key={index}
+              center={[lat, lon]}
+              radius={5}
+              pathOptions={{
+                fillColor: color,
+                color: color,
+                fillOpacity: 0.7,
+                weight: 2,
+              }}
+            >
+              <Popup>
+                <div style={{ minWidth: '150px' }}>
+                  <strong>Site ID:</strong> {String(siteId)}<br />
+                  <strong>Density:</strong> {density.toFixed(4)} sites/km²<br />
+                  <strong>Classification:</strong> {site.area_class || 'Unknown'}
+                </div>
+              </Popup>
+            </CircleMarker>
+          );
+        })}
+      </MarkerClusterGroup>
     </MapContainer>
   );
 };

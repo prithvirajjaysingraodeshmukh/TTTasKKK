@@ -8,7 +8,8 @@ from typing import List, Dict, Tuple, Optional
 import pandas as pd
 import numpy as np
 from sklearn.neighbors import BallTree
-from collections import defaultdict
+from scipy.sparse import csr_matrix
+from scipy.sparse.csgraph import connected_components
 
 logger = logging.getLogger(__name__)
 
@@ -192,39 +193,45 @@ def find_co_location_groups(
     threshold_rad = threshold_km / EARTH_RADIUS_KM
     neighbors = tree.query_radius(coords_rad, r=threshold_rad)
     
-    # Build graph: each point is connected to its neighbors
-    graph = defaultdict(set)
+    # Build sparse adjacency matrix for efficient connected components
+    n = len(df)
+    row_indices = []
+    col_indices = []
+    
     for i, neighbor_indices in enumerate(neighbors):
         for j in neighbor_indices:
             if i != j:  # Exclude self
-                graph[i].add(j)
-                graph[j].add(i)
+                row_indices.append(i)
+                col_indices.append(j)
     
-    # Find connected components using DFS
-    visited = set()
-    components = []
+    # Create sparse CSR matrix (symmetric, undirected graph)
+    if len(row_indices) > 0:
+        # Add symmetric edges (undirected graph) - use 1.0 for edge weights
+        all_rows = row_indices + col_indices
+        all_cols = col_indices + row_indices
+        adjacency = csr_matrix((np.ones(len(all_rows), dtype=np.float64), (all_rows, all_cols)), shape=(n, n))
+    else:
+        # No edges, each node is its own component
+        adjacency = csr_matrix((n, n), dtype=np.float64)
     
-    def dfs(node: int, component: set):
-        visited.add(node)
-        component.add(node)
-        for neighbor in graph[node]:
-            if neighbor not in visited:
-                dfs(neighbor, component)
+    # Find connected components using scipy (fast and non-recursive)
+    n_components, labels = connected_components(csgraph=adjacency, directed=False, return_labels=True)
     
-    for node in range(len(df)):
-        if node not in visited:
-            component = set()
-            dfs(node, component)
-            components.append(component)
+    # Group nodes by component label
+    components = {}
+    for i, label in enumerate(labels):
+        if label not in components:
+            components[label] = []
+        components[label].append(i)
     
     # Create group_id as deterministic hash of sorted member site_ids
     group_ids = {}
-    for component in components:
+    for label, component_indices in components.items():
         # Get site_ids for this component
-        component_site_ids = sorted([df.iloc[i]['site_id'] for i in component])
+        component_site_ids = sorted([df.iloc[i]['site_id'] for i in component_indices])
         # Create deterministic hash (using hash of sorted tuple)
         group_id = str(hash(tuple(component_site_ids)))
-        for i in component:
+        for i in component_indices:
             group_ids[i] = group_id
     
     # Create Series with group_id and group_size
