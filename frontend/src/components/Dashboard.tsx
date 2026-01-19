@@ -50,16 +50,103 @@ const Dashboard = ({ analysisResult }: DashboardProps) => {
     density: parseFloat(String(row.density)) || 0,
   })).filter(site => !isNaN(site.lat) && !isNaN(site.lon));
 
-  const handleDownload = async () => {
-    // Note: In a real implementation, we'd need to store the file and params
-    // For now, this is a placeholder that shows the download would work
+  /**
+   * Convert array of objects to CSV string efficiently.
+   * Handles special characters, commas, quotes, and newlines properly.
+   * Optimized for large datasets (100k+ rows).
+   */
+  const convertToCSV = (data: Record<string, any>[]): string => {
+    if (data.length === 0) {
+      return '';
+    }
+
+    // Get all unique keys from all objects (in case some rows have different keys)
+    const allKeys = new Set<string>();
+    data.forEach(row => {
+      Object.keys(row).forEach(key => allKeys.add(key));
+    });
+    const headers = Array.from(allKeys);
+
+    // Escape CSV field: wrap in quotes if contains comma, quote, or newline
+    const escapeCSVField = (field: any): string => {
+      if (field === null || field === undefined) {
+        return '';
+      }
+      
+      const str = String(field);
+      
+      // If field contains comma, quote, or newline, wrap in quotes and escape quotes
+      if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
+        return `"${str.replace(/"/g, '""')}"`;
+      }
+      
+      return str;
+    };
+
+    // Build CSV efficiently using array join (faster than string concatenation)
+    const rows: string[] = [];
+    
+    // Add header row
+    rows.push(headers.map(escapeCSVField).join(','));
+    
+    // Add data rows
+    for (let i = 0; i < data.length; i++) {
+      const row = data[i];
+      const values = headers.map(header => {
+        const value = row[header];
+        // Format numbers to reasonable precision
+        if (typeof value === 'number') {
+          // Check if it's an integer or float
+          if (Number.isInteger(value)) {
+            return value.toString();
+          }
+          // Format floats to 4 decimal places (matching table display)
+          return value.toFixed(4);
+        }
+        return escapeCSVField(value);
+      });
+      rows.push(values.join(','));
+    }
+    
+    return rows.join('\n');
+  };
+
+  /**
+   * Handle CSV download - converts current preview data to CSV and triggers browser download.
+   * Client-side only, no backend calls.
+   */
+  const handleDownload = () => {
     setDownloading(true);
     setDownloadError(null);
     
     try {
-      // This would need the original file and params - for demo purposes
-      // In production, you'd store these or use a job ID
-      alert('Download functionality requires original file and parameters. In production, this would download the full results CSV.');
+      if (!preview || preview.length === 0) {
+        setDownloadError('No data available to export');
+        setDownloading(false);
+        return;
+      }
+
+      // Convert data to CSV string
+      const csvContent = convertToCSV(preview);
+      
+      // Create Blob with CSV content
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      
+      // Create download link and trigger download
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      
+      link.setAttribute('href', url);
+      link.setAttribute('download', 'analysis_results.csv');
+      link.style.visibility = 'hidden';
+      
+      document.body.appendChild(link);
+      link.click();
+      
+      // Cleanup
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      
     } catch (err: any) {
       setDownloadError(err.message || 'Download failed');
     } finally {
